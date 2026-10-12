@@ -1,32 +1,19 @@
 {
   "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "backend/api/**/*.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "game/**",
-      "use": "@vercel/static"
+      "source": "/",
+      "destination": "/game/index.html"
     }
   ],
-  "routes": [
+  "headers": [
     {
-      "src": "/api/(.*)",
-      "dest": "/backend/api/$1",
-      "headers": {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, x-session-token, x-player-id, x-admin-token"
-      }
-    },
-    {
-      "src": "/game/(.*)",
-      "dest": "/game/$1"
-    },
-    {
-      "src": "/",
-      "dest": "/game/index.html"
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PUT,DELETE,OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, x-session-token, x-player-id, x-admin-token" }
+      ]
     }
   ]
 }

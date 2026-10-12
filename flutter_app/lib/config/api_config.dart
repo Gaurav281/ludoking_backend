@@ -1,17 +1,9 @@
-import 'package:flutter/foundation.dart';
-
 class ApiConfig {
   // Configurable base URL
   static String _customBaseUrl = '';
 
   static String get defaultBaseUrl {
-    if (kIsWeb) {
-      return 'http://localhost:3000';
-    } else if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:3000';
-    } else {
-      return 'http://localhost:3000';
-    }
+    return 'https://ludo-room-platform.vercel.app';
   }
 
   static String get baseUrl {

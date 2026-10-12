@@ -5,11 +5,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../config/api_config.dart';
 import '../../services/session_service.dart';
 import '../../services/api_service.dart';
-
-// Conditional import for Flutter Web iframe embedding
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:ui_web' as ui_web;
-import 'package:web/web.dart' as web;
+import 'platform/game_iframe_helper.dart';
 
 class GameWebViewScreen extends StatefulWidget {
   final String roomCode;
@@ -47,17 +43,7 @@ class _GameWebViewScreenState extends State<GameWebViewScreen> {
 
     if (kIsWeb) {
       // Register iframe for Flutter Web
-      ui_web.platformViewRegistry.registerViewFactory(
-        _viewTypeId,
-        (int viewId) {
-          final iframe = web.HTMLIFrameElement();
-          iframe.src = _gameUrl;
-          iframe.style.border = 'none';
-          iframe.style.width = '100%';
-          iframe.style.height = '100%';
-          return iframe;
-        },
-      );
+      registerGameIFrame(_viewTypeId, _gameUrl);
       setState(() => _isLoading = false);
     } else {
       // Mobile WebView Flutter
