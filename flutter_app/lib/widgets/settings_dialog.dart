@@ -32,47 +32,51 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    const primaryPurple = Color(0xFF7C3AED);
+    const neonPurple = Color(0xFFA855F7);
+    const cardBg = Color(0xFF14131B);
+    const borderPurple = Color(0xFF2E2A44);
+
     return AlertDialog(
-      backgroundColor: const Color(0xFF1E293B),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: cardBg,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: borderPurple),
+      ),
       title: const Text(
-        'Server Configuration',
-        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        'Server Settings',
+        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Backend API Base URL:',
+            'Backend URL:',
             style: TextStyle(color: Colors.white70, fontSize: 13),
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _urlController,
-            style: const TextStyle(color: Colors.white),
+            style: const TextStyle(color: Colors.white, fontSize: 14),
             decoration: InputDecoration(
-              hintText: 'e.g. http://10.0.2.2:3000 or https://my-app.vercel.app',
-              hintStyle: const TextStyle(color: Colors.white30, fontSize: 12),
+              hintText: 'https://ludo-room-platform.vercel.app',
+              hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
               filled: true,
-              fillColor: const Color(0xFF0F172A),
+              fillColor: const Color(0xFF09090B),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: Color(0xFF334155)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: Color(0xFF334155)),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: borderPurple),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: neonPurple, width: 2),
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Text(
-            'Default for this platform: ${ApiConfig.defaultBaseUrl}',
+            'Live: ${ApiConfig.defaultBaseUrl}',
             style: const TextStyle(color: Colors.white38, fontSize: 11),
           ),
         ],
@@ -87,17 +91,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
         ),
         ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF6366F1),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            backgroundColor: primaryPurple,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
           onPressed: () {
             ApiConfig.setBaseUrl(_urlController.text);
             Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('API URL updated to: ${ApiConfig.baseUrl}')),
+              SnackBar(
+                backgroundColor: primaryPurple,
+                content: Text('Server URL set to: ${ApiConfig.baseUrl}'),
+              ),
             );
           },
-          child: const Text('Save', style: TextStyle(color: Colors.white)),
+          child: const Text('Save', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         ),
       ],
     );

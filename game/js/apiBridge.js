@@ -1,6 +1,6 @@
 /**
  * API Bridge for Simple Multiplayer Ludo
- * Handles HTTP Polling, Action Submissions, Sound FX, and Flutter Bridge
+ * Handles HTTP Polling, Action Submissions, and Flutter Bridge
  */
 
 class ApiBridge {
@@ -24,10 +24,6 @@ class ApiBridge {
     this.onStateUpdate = null;
     this.onMatchComplete = null;
     this.onError = null;
-
-    // Web Audio FX
-    this.soundEnabled = true;
-    this.audioCtx = null;
   }
 
   parseQueryParams() {
@@ -40,72 +36,6 @@ class ApiBridge {
       result[decodeURIComponent(key)] = decodeURIComponent(value || '');
     }
     return result;
-  }
-
-  initAudio() {
-    if (!this.audioCtx) {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (AudioContext) {
-        this.audioCtx = new AudioContext();
-      }
-    }
-  }
-
-  playSound(type) {
-    if (!this.soundEnabled) return;
-    try {
-      this.initAudio();
-      if (!this.audioCtx) return;
-      if (this.audioCtx.state === 'suspended') {
-        this.audioCtx.resume();
-      }
-
-      const now = this.audioCtx.currentTime;
-      const osc = this.audioCtx.createOscillator();
-      const gain = this.audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(this.audioCtx.destination);
-
-      if (type === 'roll') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(220, now);
-        osc.frequency.exponentialRampToValueAtTime(440, now + 0.15);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-        osc.start(now);
-        osc.stop(now + 0.15);
-      } else if (type === 'move') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(520, now);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-        osc.start(now);
-        osc.stop(now + 0.1);
-      } else if (type === 'capture') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(300, now);
-        osc.frequency.linearRampToValueAtTime(150, now + 0.25);
-        gain.gain.setValueAtTime(0.35, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
-        osc.start(now);
-        osc.stop(now + 0.25);
-      } else if (type === 'win') {
-        // Simple victorious arpeggio
-        [440, 554, 659, 880].forEach((freq, i) => {
-          const noteOsc = this.audioCtx.createOscillator();
-          const noteGain = this.audioCtx.createGain();
-          noteOsc.connect(noteGain);
-          noteGain.connect(this.audioCtx.destination);
-          noteOsc.frequency.value = freq;
-          noteGain.gain.setValueAtTime(0.2, now + i * 0.12);
-          noteGain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.12 + 0.25);
-          noteOsc.start(now + i * 0.12);
-          noteOsc.stop(now + i * 0.12 + 0.25);
-        });
-      }
-    } catch (e) {
-      // Audio not permitted or interrupted
-    }
   }
 
   startPolling() {
@@ -172,8 +102,7 @@ class ApiBridge {
       }
     } finally {
       if (this.isPolling) {
-        // Exponential backoff up to 5s if consecutive errors occur
-        const backoff = Math.min(5000, this.pollingInterval * Math.pow(1.5, Math.min(this.consecutiveErrors, 4)));
+        const backoff = Math.min(4000, this.pollingInterval * Math.pow(1.3, Math.min(this.consecutiveErrors, 3)));
         this.pollingTimer = setTimeout(() => this.fetchState(), backoff);
       }
     }
@@ -181,7 +110,6 @@ class ApiBridge {
 
   async rollDice() {
     const actionId = 'act_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-    this.playSound('roll');
 
     try {
       const response = await fetch(`${this.baseUrl}/api/rooms/${this.roomCode}/roll`, {
@@ -213,14 +141,14 @@ class ApiBridge {
       return data;
     } catch (err) {
       console.error('Roll error:', err);
-      alert(err.message);
+      // Re-fetch state in case of version mismatch
+      this.fetchState();
       throw err;
     }
   }
 
   async moveToken(tokenIndex) {
     const actionId = 'act_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-    this.playSound('move');
 
     try {
       const response = await fetch(`${this.baseUrl}/api/rooms/${this.roomCode}/move`, {
@@ -245,9 +173,6 @@ class ApiBridge {
       }
 
       if (data.gameState) {
-        if (data.gameState.lastAction?.captured) {
-          this.playSound('capture');
-        }
         this.latestStateVersion = data.gameState.stateVersion;
         if (this.onStateUpdate) {
           this.onStateUpdate(data.gameState);
@@ -256,23 +181,21 @@ class ApiBridge {
       return data;
     } catch (err) {
       console.error('Move error:', err);
-      alert(err.message);
+      // Re-fetch state to recover
+      this.fetchState();
       throw err;
     }
   }
 
-  notifyFlutter(eventType, payload) {
+  notifyFlutter(type, payload = {}) {
+    const message = JSON.stringify({ type, ...payload });
     try {
-      const msg = JSON.stringify({ type: eventType, data: payload });
       if (window.FlutterGameBridge && typeof window.FlutterGameBridge.postMessage === 'function') {
-        window.FlutterGameBridge.postMessage(msg);
+        window.FlutterGameBridge.postMessage(message);
+      } else if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ from: 'LudoGame', ...payload, type }, '*');
       }
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage(msg, '*');
-      }
-    } catch (e) {
-      // Flutter bridge not active in standalone browser mode
-    }
+    } catch (_) {}
   }
 }
 

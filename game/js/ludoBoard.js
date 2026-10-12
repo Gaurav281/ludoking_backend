@@ -1,6 +1,6 @@
 /**
  * Ludo Board Coordinate System and Geometry
- * 15x15 Grid Layout
+ * 15x15 Grid Layout - Cyber Purple & Black HD Theme
  */
 
 const LUDO_COORDINATES = {
@@ -100,7 +100,28 @@ const LUDO_COORDINATES = {
 };
 
 /**
- * Calculates pixel coordinates for a token given color, step (-1..56), and token index (0..3)
+ * Returns a unique string key representing the board square a token is on.
+ */
+function getCellKey(color, step, tokenIndex) {
+  if (step === -1) {
+    return `yard_${color}_${tokenIndex}`;
+  }
+  if (step >= 0 && step <= 50) {
+    const startTile = color === 'red' ? 0 : 26;
+    const tileIndex = (startTile + step) % 52;
+    return `track_${tileIndex}`;
+  }
+  if (step >= 51 && step <= 55) {
+    return `home_${color}_${step}`;
+  }
+  if (step === 56) {
+    return `goal_${color}`;
+  }
+  return `cell_${color}_${step}_${tokenIndex}`;
+}
+
+/**
+ * Calculates base pixel coordinates for a token
  */
 function getTokenPixelPosition(color, step, tokenIndex, boardX, boardY, cellSize) {
   // In yard
@@ -137,37 +158,81 @@ function getTokenPixelPosition(color, step, tokenIndex, boardX, boardY, cellSize
 }
 
 /**
- * Render the high-definition Ludo board on a Phaser Graphics object
+ * Calculates pixel coordinates with anti-stacking offsets when multiple tokens occupy the same square
+ */
+function getTokenPixelPositionWithOffset(color, step, tokenIndex, boardX, boardY, cellSize, slotIndex = 0, totalSlots = 1) {
+  const base = getTokenPixelPosition(color, step, tokenIndex, boardX, boardY, cellSize);
+  if (totalSlots <= 1 || step === -1) {
+    return { x: base.x, y: base.y, scale: 1.0 };
+  }
+
+  const d = cellSize * 0.22;
+  if (totalSlots === 2) {
+    if (slotIndex === 0) return { x: base.x - d, y: base.y - d, scale: 0.82 };
+    return { x: base.x + d, y: base.y + d, scale: 0.82 };
+  }
+  if (totalSlots === 3) {
+    if (slotIndex === 0) return { x: base.x - d, y: base.y - d, scale: 0.74 };
+    if (slotIndex === 1) return { x: base.x + d, y: base.y - d, scale: 0.74 };
+    return { x: base.x, y: base.y + d, scale: 0.74 };
+  }
+  // 4 or more
+  const offsets = [
+    { x: -d, y: -d },
+    { x: d, y: -d },
+    { x: -d, y: d },
+    { x: d, y: d }
+  ];
+  const off = offsets[slotIndex % 4];
+  return { x: base.x + off.x, y: base.y + off.y, scale: 0.68 };
+}
+
+/**
+ * Render the modern White, Purple, Black HD Ludo board
  */
 function drawLudoBoard(graphics, scene, boardX, boardY, boardSize) {
   const cellSize = boardSize / 15;
   graphics.clear();
 
-  // Background
-  graphics.fillStyle(0x0f172a, 1);
-  graphics.fillRoundedRect(boardX - 4, boardY - 4, boardSize + 8, boardSize + 8, 16);
+  // Outer Border & Glow Frame
+  graphics.fillStyle(0x09090b, 1);
+  graphics.fillRoundedRect(boardX - 6, boardY - 6, boardSize + 12, boardSize + 12, 18);
+  graphics.lineStyle(2, 0x2e2a44, 0.8);
+  graphics.strokeRoundedRect(boardX - 6, boardY - 6, boardSize + 12, boardSize + 12, 18);
 
   // Board Base
-  graphics.fillStyle(0x1e293b, 1);
-  graphics.fillRoundedRect(boardX, boardY, boardSize, boardSize, 12);
+  graphics.fillStyle(0x14131b, 1);
+  graphics.fillRoundedRect(boardX, boardY, boardSize, boardSize, 14);
 
   // Yard Bases (6x6 cells each)
-  const drawYardBase = (c, r, bgColor, borderColor, title) => {
+  const drawYardBase = (c, r, bgColor, borderColor, isInactive = false) => {
     const x = boardX + c * cellSize;
     const y = boardY + r * cellSize;
     const w = 6 * cellSize;
 
-    // Outer box
+    if (isInactive) {
+      // Sleek Dark Obsidian Corner with subtle purple accent
+      graphics.fillStyle(0x181724, 1);
+      graphics.fillRoundedRect(x + 4, y + 4, w - 8, w - 8, 12);
+      graphics.lineStyle(1, 0x2e2a44, 0.5);
+      graphics.strokeRoundedRect(x + 4, y + 4, w - 8, w - 8, 12);
+
+      graphics.fillStyle(0x12111a, 0.8);
+      graphics.fillRoundedRect(x + cellSize * 1, y + cellSize * 1, w - cellSize * 2, w - cellSize * 2, 10);
+      return;
+    }
+
+    // Active player yard
     graphics.fillStyle(bgColor, 1);
     graphics.fillRoundedRect(x + 4, y + 4, w - 8, w - 8, 12);
 
-    // Inner white container
-    graphics.fillStyle(0xffffff, 0.95);
+    // Inner White Container
+    graphics.fillStyle(0xffffff, 0.96);
     graphics.fillRoundedRect(x + cellSize * 1, y + cellSize * 1, w - cellSize * 2, w - cellSize * 2, 10);
 
-    // 4 Token sockets
-    graphics.fillStyle(borderColor, 0.3);
-    graphics.lineStyle(2, borderColor, 0.8);
+    // 4 Token Sockets
+    graphics.fillStyle(borderColor, 0.18);
+    graphics.lineStyle(2, borderColor, 0.85);
     
     const socketPositions = [
       { ox: 1.5, oy: 1.5 },
@@ -179,53 +244,52 @@ function drawLudoBoard(graphics, scene, boardX, boardY, boardSize) {
     socketPositions.forEach(pos => {
       const sx = x + pos.ox * cellSize + cellSize / 2;
       const sy = y + pos.oy * cellSize + cellSize / 2;
-      graphics.fillCircle(sx, sy, cellSize * 0.4);
-      graphics.strokeCircle(sx, sy, cellSize * 0.4);
+      graphics.fillCircle(sx, sy, cellSize * 0.42);
+      graphics.strokeCircle(sx, sy, cellSize * 0.42);
     });
   };
 
-  // Red Yard (Top Left)
-  drawYardBase(0, 0, 0xef4444, 0xdc2626, 'RED');
+  // Red Yard (Top Left - Active Player 1)
+  drawYardBase(0, 0, 0xef4444, 0xdc2626, false);
 
-  // Green Yard (Top Right - Decorative)
-  drawYardBase(9, 0, 0x10b981, 0x059669, 'GREEN');
+  // Decorative Top Right (Inactive)
+  drawYardBase(9, 0, 0x1e1b2e, 0x2e2a44, true);
 
-  // Blue Yard (Bottom Left - Decorative)
-  drawYardBase(0, 9, 0x3b82f6, 0x2563eb, 'BLUE');
+  // Decorative Bottom Left (Inactive)
+  drawYardBase(0, 9, 0x1e1b2e, 0x2e2a44, true);
 
-  // Yellow Yard (Bottom Right)
-  drawYardBase(9, 9, 0xf59e0b, 0xd97706, 'YELLOW');
+  // Yellow Yard (Bottom Right - Active Player 2)
+  drawYardBase(9, 9, 0xf59e0b, 0xd97706, false);
 
   // Draw Grid Tiles (Common Track)
   LUDO_COORDINATES.track.forEach((tile, index) => {
     const tx = boardX + tile.c * cellSize;
     const ty = boardY + tile.r * cellSize;
 
-    // Default white tile
     let fillColor = 0xffffff;
-    let alpha = 0.95;
+    let alpha = 0.98;
 
     // Red start tile
     if (index === 0) {
-      fillColor = 0xfca5a5; // Red tint
+      fillColor = 0xfecaca;
     }
     // Yellow start tile
     else if (index === 26) {
-      fillColor = 0xfde68a; // Yellow tint
+      fillColor = 0xfef08a;
     }
-    // Safe star tiles
+    // Safe star tiles - Sleek lavender / purple star
     else if (LUDO_COORDINATES.safeTiles.includes(index)) {
-      fillColor = 0xe0e7ff; // Indigo star tint
+      fillColor = 0xf3e8ff; // Soft purple tint
     }
 
     graphics.fillStyle(fillColor, alpha);
-    graphics.lineStyle(1, 0xcbd5e1, 0.8);
+    graphics.lineStyle(1, 0xd4d4d8, 0.8);
     graphics.fillRoundedRect(tx + 1, ty + 1, cellSize - 2, cellSize - 2, 4);
     graphics.strokeRoundedRect(tx + 1, ty + 1, cellSize - 2, cellSize - 2, 4);
 
-    // Draw Star icon on safe tiles
+    // Draw Royal Purple Star on safe tiles
     if (LUDO_COORDINATES.safeTiles.includes(index)) {
-      graphics.fillStyle(0x6366f1, 1);
+      graphics.fillStyle(0x7c3aed, 1);
       const cx = tx + cellSize / 2;
       const cy = ty + cellSize / 2;
       const r = cellSize * 0.22;
@@ -277,8 +341,8 @@ function drawLudoBoard(graphics, scene, boardX, boardY, boardSize) {
   graphics.closePath();
   graphics.fillPath();
 
-  // Center Top Triangle (Green)
-  graphics.fillStyle(0x059669, 1);
+  // Center Top & Bottom (Dark Purple / Black Theme)
+  graphics.fillStyle(0x2e2a44, 1);
   graphics.beginPath();
   graphics.moveTo(boardX + 6 * cellSize, boardY + 6 * cellSize);
   graphics.lineTo(cx, cy);
@@ -286,8 +350,7 @@ function drawLudoBoard(graphics, scene, boardX, boardY, boardSize) {
   graphics.closePath();
   graphics.fillPath();
 
-  // Center Bottom Triangle (Blue)
-  graphics.fillStyle(0x2563eb, 1);
+  graphics.fillStyle(0x2e2a44, 1);
   graphics.beginPath();
   graphics.moveTo(boardX + 6 * cellSize, boardY + 9 * cellSize);
   graphics.lineTo(cx, cy);
@@ -295,11 +358,11 @@ function drawLudoBoard(graphics, scene, boardX, boardY, boardSize) {
   graphics.closePath();
   graphics.fillPath();
 
-  // Center Golden Trophy Circle
-  graphics.fillStyle(0xfef08a, 1);
-  graphics.fillCircle(cx, cy, cellSize * 0.45);
-  graphics.lineStyle(2, 0xca8a04, 1);
-  graphics.strokeCircle(cx, cy, cellSize * 0.45);
+  // Center Crown / Trophy Circle
+  graphics.fillStyle(0xffffff, 1);
+  graphics.fillCircle(cx, cy, cellSize * 0.44);
+  graphics.lineStyle(2, 0x7c3aed, 1);
+  graphics.strokeCircle(cx, cy, cellSize * 0.44);
 }
 
 function drawStarShape(graphics, cx, cy, spikes, outerRadius, innerRadius) {
@@ -326,8 +389,11 @@ function drawStarShape(graphics, cx, cy, spikes, outerRadius, innerRadius) {
   graphics.fillPath();
 }
 
+window.LUDO_COORDINATES = LUDO_COORDINATES;
 window.LudoBoard = {
   LUDO_COORDINATES,
+  getCellKey,
   getTokenPixelPosition,
+  getTokenPixelPositionWithOffset,
   drawLudoBoard
 };

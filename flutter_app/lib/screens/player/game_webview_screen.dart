@@ -100,21 +100,21 @@ class _GameWebViewScreenState extends State<GameWebViewScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Exit Match?', style: TextStyle(color: Colors.white)),
+        backgroundColor: const Color(0xFF14131B),
+        title: const Text('Exit Match?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: const Text(
-          'Leaving an active match will forfeit the game to your opponent.',
+          'Are you sure you want to exit?',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep Playing', style: TextStyle(color: Colors.white60)),
+            child: const Text('Stay', style: TextStyle(color: Colors.white70)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Exit & Forfeit', style: TextStyle(color: Colors.white)),
+            child: const Text('Exit', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -135,15 +135,15 @@ class _GameWebViewScreenState extends State<GameWebViewScreen> {
   Widget build(BuildContext context) {
     final themeColor = widget.color.toLowerCase() == 'red' ? const Color(0xFFEF4444) : const Color(0xFFEAB308);
 
-    return WillPopScope(
-      onWillPop: () async {
-        await _handleExit();
-        return false;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _handleExit();
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: const Color(0xFF09090B),
         appBar: AppBar(
-          backgroundColor: const Color(0xFF0F172A),
+          backgroundColor: const Color(0xFF09090B),
           elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),

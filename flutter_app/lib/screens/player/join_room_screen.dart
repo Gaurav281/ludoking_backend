@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
+import '../../services/session_service.dart';
 import '../../models/room_model.dart';
+import '../../widgets/settings_dialog.dart';
+import '../admin/admin_login_screen.dart';
 import 'player_lobby_screen.dart';
+import 'game_webview_screen.dart';
 
 class JoinRoomScreen extends StatefulWidget {
   const JoinRoomScreen({super.key});
@@ -15,6 +19,13 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
   final _nameController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
+  Map<String, String?> _activeSession = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSavedSession();
+  }
 
   @override
   void dispose() {
@@ -23,20 +34,41 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
     super.dispose();
   }
 
+  Future<void> _checkSavedSession() async {
+    try {
+      final session = await SessionService.getPlayerSession();
+      if (session['roomCode'] != null && session['playerId'] != null && session['sessionToken'] != null) {
+        final res = await ApiService.getRoom(session['roomCode']!);
+        if (res['success'] == true) {
+          final room = res['room'] as RoomModel;
+          if (room.isWaiting || room.isInProgress) {
+            if (mounted) {
+              setState(() {
+                _activeSession = session;
+              });
+            }
+          } else {
+            await SessionService.clearPlayerSession();
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
   Future<void> _handleJoin() async {
     final code = _codeController.text.trim().toUpperCase();
     final name = _nameController.text.trim();
 
     if (code.isEmpty) {
-      setState(() => _errorMessage = 'Please enter a 6-character room code');
+      setState(() => _errorMessage = 'Please enter room code');
       return;
     }
     if (code.length != 6) {
-      setState(() => _errorMessage = 'Room code must be exactly 6 characters');
+      setState(() => _errorMessage = 'Room code must be 6 characters');
       return;
     }
     if (name.isEmpty) {
-      setState(() => _errorMessage = 'Please enter your display name');
+      setState(() => _errorMessage = 'Please enter your name');
       return;
     }
 
@@ -57,7 +89,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
         final sessionToken = res['sessionToken'] as String;
         final color = res['color'] as String;
 
-        Navigator.pushReplacement(
+        Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => PlayerLobbyScreen(
@@ -70,7 +102,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
           ),
         );
       } else if (mounted) {
-        setState(() => _errorMessage = res['error'] ?? 'Failed to join room');
+        setState(() => _errorMessage = res['error'] ?? 'Room full or invalid');
       }
     } catch (e) {
       if (mounted) {
@@ -81,141 +113,300 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
     }
   }
 
+  void _resumeActiveMatch() {
+    final roomCode = _activeSession['roomCode'] ?? '';
+    final playerId = _activeSession['playerId'] ?? '';
+    final sessionToken = _activeSession['sessionToken'] ?? '';
+    final color = _activeSession['color'] ?? 'red';
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GameWebViewScreen(
+          roomCode: roomCode,
+          playerId: playerId,
+          sessionToken: sessionToken,
+          color: color,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    const primaryPurple = Color(0xFF7C3AED);
+    const neonPurple = Color(0xFFA855F7);
+    const cardBg = Color(0xFF14131B);
+    const borderPurple = Color(0xFF2E2A44);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFF09090B),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('Join Room', style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+            onPressed: () => SettingsDialog.show(context),
+            tooltip: 'Settings',
+          ),
+        ],
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Card(
-              color: const Color(0xFF1E293B),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: const BorderSide(color: Color(0xFF334155), width: 1),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(28.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Icon(Icons.meeting_room_rounded, size: 48, color: Color(0xFF6366F1)),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Enter Match Code',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // App Branding Header
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [primaryPurple, neonPurple],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(22),
+                      boxShadow: [
+                        BoxShadow(
+                          color: primaryPurple.withValues(alpha: 0.4),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Enter the room code provided by the tournament admin to play.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 13, color: Colors.white60),
+                    child: const Icon(
+                      Icons.casino_rounded,
+                      size: 40,
+                      color: Colors.white,
                     ),
-                    const SizedBox(height: 24),
-
-                    if (_errorMessage != null) ...[
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF450A0A),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFEF4444)),
-                        ),
-                        child: Text(
-                          _errorMessage!,
-                          style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // Room Code Field
-                    TextField(
-                      controller: _codeController,
-                      textCapitalization: TextCapitalization.characters,
-                      style: const TextStyle(
-                        color: Color(0xFF38BDF8),
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 4,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: '6-Digit Room Code',
-                        labelStyle: const TextStyle(color: Colors.white60, letterSpacing: 0, fontSize: 14),
-                        hintText: 'e.g. LUD982',
-                        hintStyle: const TextStyle(color: Colors.white24, letterSpacing: 2),
-                        prefixIcon: const Icon(Icons.tag_rounded, color: Color(0xFF6366F1)),
-                        filled: true,
-                        fillColor: const Color(0xFF0F172A),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFF334155)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
-                        ),
-                      ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Ludo Room',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5,
                     ),
-                    const SizedBox(height: 16),
-
-                    // Display Name Field
-                    TextField(
-                      controller: _nameController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Your Name',
-                        labelStyle: const TextStyle(color: Colors.white60),
-                        hintText: 'e.g. Gaurav',
-                        hintStyle: const TextStyle(color: Colors.white24),
-                        prefixIcon: const Icon(Icons.person_outline_rounded, color: Color(0xFF6366F1)),
-                        filled: true,
-                        fillColor: const Color(0xFF0F172A),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFF334155)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
-                        ),
-                      ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Enter your room code to start playing',
+                    style: TextStyle(
+                      color: Colors.white60,
+                      fontSize: 14,
                     ),
-                    const SizedBox(height: 24),
+                  ),
+                  const SizedBox(height: 28),
 
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6366F1),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 4,
+                  // Resume Match Banner (if active)
+                  if (_activeSession.isNotEmpty) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 20),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: neonPurple.withValues(alpha: 0.5)),
                       ),
-                      onPressed: _isLoading ? null : _handleJoin,
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                            )
-                          : const Text(
-                              'Join Match',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: primaryPurple.withValues(alpha: 0.2),
+                              shape: BoxShape.circle,
                             ),
+                            child: const Icon(Icons.play_arrow_rounded, color: neonPurple, size: 24),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Active Game Found',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                                ),
+                                Text(
+                                  'Room ${_activeSession['roomCode']}',
+                                  style: const TextStyle(color: Colors.white60, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryPurple,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              minimumSize: Size.zero,
+                            ),
+                            onPressed: _resumeActiveMatch,
+                            child: const Text('Resume', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
-                ),
+
+                  // Main Card
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: cardBg,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: borderPurple),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          blurRadius: 30,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Room Code Input
+                        TextField(
+                          controller: _codeController,
+                          textCapitalization: TextCapitalization.characters,
+                          maxLength: 6,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            letterSpacing: 4,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                          decoration: InputDecoration(
+                            counterText: '',
+                            hintText: 'ROOM CODE',
+                            hintStyle: const TextStyle(
+                              color: Colors.white24,
+                              letterSpacing: 2,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            prefixIcon: const Icon(Icons.tag_rounded, color: neonPurple),
+                            filled: true,
+                            fillColor: const Color(0xFF09090B),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(color: borderPurple),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Player Name Input
+                        TextField(
+                          controller: _nameController,
+                          textCapitalization: TextCapitalization.words,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          decoration: InputDecoration(
+                            hintText: 'Your Name',
+                            prefixIcon: const Icon(Icons.person_outline_rounded, color: neonPurple),
+                            filled: true,
+                            fillColor: const Color(0xFF09090B),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(color: borderPurple),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Error Message
+                        if (_errorMessage != null)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.error_outline_rounded, color: Color(0xFFEF4444), size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _errorMessage!,
+                                    style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        // Join Room Button
+                        SizedBox(
+                          height: 52,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _handleJoin,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryPurple,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              elevation: 0,
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                                  )
+                                : const Text(
+                                    'Join Room',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Admin Panel Button Below
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+                      );
+                    },
+                    icon: const Icon(Icons.admin_panel_settings_outlined, color: neonPurple, size: 20),
+                    label: const Text(
+                      'Admin Panel',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: borderPurple),
+                      backgroundColor: cardBg.withValues(alpha: 0.5),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
               ),
             ),
           ),

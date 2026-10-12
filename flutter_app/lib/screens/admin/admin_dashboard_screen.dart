@@ -7,7 +7,6 @@ import '../../widgets/settings_dialog.dart';
 import 'admin_lobby_screen.dart';
 import 'admin_rooms_screen.dart';
 import 'admin_results_screen.dart';
-import 'admin_login_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -26,7 +25,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void initState() {
     super.initState();
     _fetchStats();
-    // Poll admin dashboard every 3 seconds
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (mounted) _fetchStats(silent: true);
     });
@@ -48,26 +46,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         });
       }
     } catch (_) {
-      // Silently ignore transient network glitches during polling
     } finally {
       if (mounted && !silent) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _handleCreateRoom() async {
-    if (_isCreatingRoom) return; // Prevent duplicate rapid taps
+    if (_isCreatingRoom) return;
 
     setState(() => _isCreatingRoom = true);
     try {
       final res = await ApiService.createRoom();
       if (res['success'] == true && mounted) {
         final room = res['room'] as RoomModel;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFF10B981),
-            content: Text('Room ${room.code} created for free!'),
-          ),
-        );
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -78,7 +69,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: const Color(0xFFEF4444),
-            content: Text(res['error'] ?? 'Room creation failed'),
+            content: Text(res['error'] ?? 'Failed to create room'),
           ),
         );
       }
@@ -87,7 +78,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: const Color(0xFFEF4444),
-            content: Text('Network error: ${e.toString()}'),
+            content: Text('Error: ${e.toString()}'),
           ),
         );
       }
@@ -99,116 +90,92 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _handleLogout() async {
     await SessionService.clearAdminToken();
     if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-      );
+      Navigator.pop(context);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    const primaryPurple = Color(0xFF7C3AED);
+    const neonPurple = Color(0xFFA855F7);
+    const cardBg = Color(0xFF14131B);
+    const borderPurple = Color(0xFF2E2A44);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFF09090B),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.white70),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: const Text(
-          'Admin Dashboard',
+          'Admin Panel',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         actions: [
+          // ONLY show setting button in admin panel as requested
           IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => _fetchStats(),
-            tooltip: 'Refresh',
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
+            icon: const Icon(Icons.settings_outlined, color: Colors.white),
             onPressed: () => SettingsDialog.show(context),
             tooltip: 'Settings',
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: _handleLogout,
-            tooltip: 'Logout',
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF6366F1)))
+          ? const Center(child: CircularProgressIndicator(color: neonPurple))
           : RefreshIndicator(
               onRefresh: () => _fetchStats(),
-              color: const Color(0xFF6366F1),
+              color: neonPurple,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Free Room Creation Promo Card
+                    // Create Room Hero Card
                     Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(22),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+                          colors: [primaryPurple, Color(0xFF6D28D9)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.circular(22),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF6366F1).withOpacity(0.3),
-                            blurRadius: 15,
-                            offset: const Offset(0, 6),
-                          )
+                            color: primaryPurple.withValues(alpha: 0.35),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
                         ],
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Text(
-                                  '100% FREE • NO COINS',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
                           const Text(
-                            'Host Ludo Tournament',
+                            'Host Tournament',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 22,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 4),
                           const Text(
-                            'Create a room, share the 6-character room code with 2 players, and get automatically verified results without screenshots.',
-                            style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+                            'Create free rooms with auto-verified match results.',
+                            style: TextStyle(color: Colors.white70, fontSize: 13),
                           ),
                           const SizedBox(height: 18),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
-                              foregroundColor: const Color(0xFF4F46E5),
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                              foregroundColor: primaryPurple,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              elevation: 2,
+                              elevation: 0,
                             ),
                             onPressed: _isCreatingRoom ? null : _handleCreateRoom,
                             icon: _isCreatingRoom
@@ -217,13 +184,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                     height: 18,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: Color(0xFF4F46E5),
+                                      color: primaryPurple,
                                     ),
                                   )
-                                : const Icon(Icons.add_circle_outline_rounded, size: 22),
+                                : const Icon(Icons.add_rounded, size: 22),
                             label: Text(
-                              _isCreatingRoom ? 'Generating Room...' : 'Create Room',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              _isCreatingRoom ? 'Creating Room...' : 'Create Room',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                             ),
                           ),
                         ],
@@ -233,7 +200,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
                     // Stats Grid
                     const Text(
-                      'Match Overview',
+                      'Match Stats',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -245,39 +212,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       crossAxisCount: 2,
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
                       childAspectRatio: 1.5,
                       children: [
-                        _buildStatCard(
-                          title: 'Total Rooms',
-                          value: '${_stats.total}',
-                          icon: Icons.meeting_room_outlined,
-                          color: const Color(0xFF6366F1),
-                        ),
-                        _buildStatCard(
-                          title: 'Waiting Rooms',
-                          value: '${_stats.waiting}',
-                          icon: Icons.hourglass_top_rounded,
-                          color: const Color(0xFFF59E0B),
-                        ),
-                        _buildStatCard(
-                          title: 'Active Matches',
-                          value: '${_stats.inProgress}',
-                          icon: Icons.play_circle_outline_rounded,
-                          color: const Color(0xFF38BDF8),
-                        ),
-                        _buildStatCard(
-                          title: 'Completed',
-                          value: '${_stats.completed}',
-                          icon: Icons.check_circle_outline_rounded,
-                          color: const Color(0xFF10B981),
-                        ),
+                        _buildStatCard('Total Rooms', '${_stats.total}', Icons.meeting_room_outlined, neonPurple),
+                        _buildStatCard('Waiting', '${_stats.waiting}', Icons.hourglass_top_rounded, const Color(0xFFF59E0B)),
+                        _buildStatCard('Playing', '${_stats.inProgress}', Icons.play_circle_outline_rounded, const Color(0xFF38BDF8)),
+                        _buildStatCard('Completed', '${_stats.completed}', Icons.check_circle_outline_rounded, const Color(0xFF10B981)),
                       ],
                     ),
                     const SizedBox(height: 24),
 
-                    // Quick Navigation Links
+                    // Management Links
                     const Text(
                       'Management',
                       style: TextStyle(
@@ -288,23 +235,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     ),
                     const SizedBox(height: 12),
                     ListTile(
-                      tileColor: const Color(0xFF1E293B),
+                      tileColor: cardBg,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        side: const BorderSide(color: Color(0xFF334155)),
+                        borderRadius: BorderRadius.circular(16),
+                        side: const BorderSide(color: borderPurple),
                       ),
-                      leading: const CircleAvatar(
-                        backgroundColor: Color(0xFF312E81),
-                        child: Icon(Icons.history_rounded, color: Color(0xFF818CF8)),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: primaryPurple.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.list_alt_rounded, color: neonPurple),
                       ),
-                      title: const Text(
-                        'All Rooms History',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: const Text(
-                        'Inspect active, waiting, and historical rooms',
-                        style: TextStyle(color: Colors.white60, fontSize: 12),
-                      ),
+                      title: const Text('All Rooms', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('View and manage room history', style: TextStyle(color: Colors.white54, fontSize: 12)),
                       trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white54),
                       onTap: () {
                         Navigator.push(
@@ -313,25 +258,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         );
                       },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     ListTile(
-                      tileColor: const Color(0xFF1E293B),
+                      tileColor: cardBg,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        side: const BorderSide(color: Color(0xFF334155)),
+                        borderRadius: BorderRadius.circular(16),
+                        side: const BorderSide(color: borderPurple),
                       ),
-                      leading: const CircleAvatar(
-                        backgroundColor: Color(0xFF064E3B),
-                        child: Icon(Icons.verified_rounded, color: Color(0xFF34D399)),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.verified_rounded, color: Color(0xFF10B981)),
                       ),
-                      title: const Text(
-                        'Verified Results Dashboard',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: const Text(
-                        'Automatic winner verification without screenshots',
-                        style: TextStyle(color: Colors.white60, fontSize: 12),
-                      ),
+                      title: const Text('Verified Results', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Automatic match results log', style: TextStyle(color: Colors.white54, fontSize: 12)),
                       trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white54),
                       onTap: () {
                         Navigator.push(
@@ -340,6 +283,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         );
                       },
                     ),
+
+                    const SizedBox(height: 36),
+
+                    // Clean Logout Action
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: _handleLogout,
+                        icon: const Icon(Icons.logout_rounded, color: Colors.white38, size: 18),
+                        label: const Text('Log out', style: TextStyle(color: Colors.white54)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),
@@ -347,18 +302,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  Widget _buildStatCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-  }) {
+  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: const Color(0xFF14131B),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF334155), width: 1),
+        border: Border.all(color: const Color(0xFF2E2A44)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -367,19 +317,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: const TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w500),
-              ),
-              Icon(icon, color: color, size: 20),
+              Text(title, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+              Icon(icon, color: color, size: 18),
             ],
           ),
           Text(
             value,
-            style: TextStyle(
+            style: const TextStyle(
               color: Colors.white,
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],

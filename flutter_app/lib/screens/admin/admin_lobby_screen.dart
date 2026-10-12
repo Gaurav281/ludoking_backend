@@ -25,7 +25,6 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
   void initState() {
     super.initState();
     _fetchRoom();
-    // Poll room status every 2 seconds
     _pollingTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (mounted) _fetchRoom(silent: true);
     });
@@ -59,35 +58,29 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
   }
 
   Future<void> _handleStartMatch() async {
-    if (_room == null || !_room!.isFull || _isStartingMatch) return;
+    if (_room == null || !_room!.isFull) return;
 
-    setState(() => _isStartingMatch = true);
+    setState(() {
+      _isStartingMatch = true;
+      _errorMessage = null;
+    });
+
     try {
       final res = await ApiService.startMatch(widget.roomCode);
       if (res['success'] == true && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            backgroundColor: Color(0xFF10B981),
-            content: Text('Match started successfully! Players are now playing.'),
+            backgroundColor: Color(0xFF7C3AED),
+            content: Text('Match started! Both players can now roll.'),
           ),
         );
         _fetchRoom();
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFFEF4444),
-            content: Text(res['error'] ?? 'Failed to start match'),
-          ),
-        );
+        setState(() => _errorMessage = res['error'] ?? 'Failed to start match');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFFEF4444),
-            content: Text('Network error: ${e.toString()}'),
-          ),
-        );
+        setState(() => _errorMessage = 'Error: ${e.toString()}');
       }
     } finally {
       if (mounted) setState(() => _isStartingMatch = false);
@@ -98,30 +91,48 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Cancel Room?', style: TextStyle(color: Colors.white)),
+        backgroundColor: const Color(0xFF14131B),
+        title: const Text('Cancel Room?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: const Text(
-          'Are you sure you want to cancel this room? Players will no longer be able to join.',
+          'Are you sure you want to cancel this room?',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('No, Keep Room', style: TextStyle(color: Colors.white60)),
+            child: const Text('Stay', style: TextStyle(color: Colors.white70)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Yes, Cancel', style: TextStyle(color: Colors.white)),
+            child: const Text('Cancel Room', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
 
     if (confirm == true && mounted) {
-      final res = await ApiService.cancelRoom(widget.roomCode);
-      if (res['success'] == true && mounted) {
-        Navigator.pop(context);
+      try {
+        final res = await ApiService.cancelRoom(widget.roomCode);
+        if (res['success'] == true && mounted) {
+          Navigator.pop(context);
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: const Color(0xFFEF4444),
+              content: Text(res['error'] ?? 'Cancel failed'),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: const Color(0xFFEF4444),
+              content: Text('Error: ${e.toString()}'),
+            ),
+          );
+        }
       }
     }
   }
@@ -130,21 +141,9 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
     Clipboard.setData(ClipboardData(text: widget.roomCode));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: const Color(0xFF6366F1),
-        content: Text('Room code "${widget.roomCode}" copied to clipboard!'),
+        backgroundColor: const Color(0xFF7C3AED),
+        content: Text('Room code ${widget.roomCode} copied'),
         duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  void _shareRoom() {
-    Clipboard.setData(ClipboardData(
-      text: 'Join my Ludo Tournament room on the app! Room Code: ${widget.roomCode}',
-    ));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        backgroundColor: Color(0xFF6366F1),
-        content: Text('Room invitation copied to clipboard!'),
       ),
     );
   }
@@ -156,12 +155,21 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
     final isInProgress = _room?.isInProgress ?? false;
     final isCompleted = _room?.isCompleted ?? false;
 
+    const primaryPurple = Color(0xFF7C3AED);
+    const neonPurple = Color(0xFFA855F7);
+    const cardBg = Color(0xFF14131B);
+    const borderPurple = Color(0xFF2E2A44);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFF09090B),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('Room Lobby (Admin)', style: TextStyle(fontWeight: FontWeight.bold)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.white70),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text('Room Lobby', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
         actions: [
           if (isWaiting)
             IconButton(
@@ -170,16 +178,16 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
               tooltip: 'Cancel Room',
             ),
           IconButton(
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
             onPressed: () => _fetchRoom(),
             tooltip: 'Refresh',
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF6366F1)))
+          ? const Center(child: CircularProgressIndicator(color: neonPurple))
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -188,8 +196,8 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
                       margin: const EdgeInsets.only(bottom: 16),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF450A0A),
-                        borderRadius: BorderRadius.circular(10),
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: const Color(0xFFEF4444)),
                       ),
                       child: Text(
@@ -198,13 +206,14 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
                       ),
                     ),
                   ],
+
                   // Room Code Hero Box
                   Container(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(22),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: cardBg,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF334155), width: 1.5),
+                      border: Border.all(color: borderPurple),
                     ),
                     child: Column(
                       children: [
@@ -223,47 +232,27 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
                             if (_room != null) StatusBadge(status: _room!.status),
                           ],
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 12),
                         SelectableText(
                           widget.roomCode,
                           style: const TextStyle(
-                            color: Color(0xFF38BDF8),
-                            fontSize: 42,
+                            color: neonPurple,
+                            fontSize: 38,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 6,
                           ),
                         ),
                         const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.white,
-                                  side: const BorderSide(color: Color(0xFF6366F1)),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                ),
-                                onPressed: _copyRoomCode,
-                                icon: const Icon(Icons.copy_rounded, size: 18),
-                                label: const Text('Copy Code'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF6366F1),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                ),
-                                onPressed: _shareRoom,
-                                icon: const Icon(Icons.share_rounded, size: 18),
-                                label: const Text('Share Room'),
-                              ),
-                            ),
-                          ],
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: borderPurple),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: _copyRoomCode,
+                          icon: const Icon(Icons.copy_rounded, size: 18, color: neonPurple),
+                          label: const Text('Copy Room Code'),
                         ),
                       ],
                     ),
@@ -271,31 +260,11 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
                   const SizedBox(height: 24),
 
                   // Player Slots Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Player Slots',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: isFull ? const Color(0xFF064E3B) : const Color(0xFF78350F),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          isFull ? '2 / 2 Players Ready' : '${(_room?.player1 != null ? 1 : 0) + (_room?.player2 != null ? 1 : 0)} / 2 Joined',
-                          style: TextStyle(
-                            color: isFull ? const Color(0xFF6EE7B7) : const Color(0xFFFDE68A),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
+                  const Text(
+                    'Players',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
 
                   // Player 1 Card (Red)
                   _buildPlayerSlotCard(
@@ -303,6 +272,8 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
                     colorName: 'Red',
                     themeColor: const Color(0xFFEF4444),
                     player: _room?.player1,
+                    cardBg: cardBg,
+                    borderPurple: borderPurple,
                   ),
                   const SizedBox(height: 12),
 
@@ -310,22 +281,24 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
                   _buildPlayerSlotCard(
                     slotNumber: 2,
                     colorName: 'Yellow',
-                    themeColor: const Color(0xFFEAB308),
+                    themeColor: const Color(0xFFF59E0B),
                     player: _room?.player2,
+                    cardBg: cardBg,
+                    borderPurple: borderPurple,
                   ),
                   const SizedBox(height: 28),
 
-                  // Start Match / Match Status Action Section
+                  // Status Action
                   if (isWaiting) ...[
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: isFull ? const Color(0xFF10B981) : const Color(0xFF334155),
+                        backgroundColor: isFull ? primaryPurple : const Color(0xFF27272A),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         elevation: isFull ? 4 : 0,
                       ),
-                      onPressed: isFull && !_isStartingMatch ? _handleStartMatch : null,
+                      onPressed: (_isStartingMatch || !isFull) ? null : _handleStartMatch,
                       child: _isStartingMatch
                           ? const SizedBox(
                               width: 22,
@@ -333,43 +306,34 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
                               child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                             )
                           : Text(
-                              isFull ? 'Start Match Now' : 'Waiting for 2 Players to Join...',
+                              isFull ? 'Start Match' : 'Waiting for Players...',
                               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                             ),
-                    ),
-                    const SizedBox(height: 10),
-                    Center(
-                      child: Text(
-                        isFull
-                          ? 'Both players connected. Tap to launch the authoritative match!'
-                          : 'Share the room code above with Player 1 and Player 2',
-                        style: const TextStyle(color: Colors.white54, fontSize: 12),
-                      ),
                     ),
                   ] else if (isInProgress) ...[
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E1B4B),
+                        color: cardBg,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFF6366F1)),
+                        border: Border.all(color: primaryPurple),
                       ),
-                      child: Row(
-                        children: const [
-                          Icon(Icons.sports_esports_rounded, color: Color(0xFF818CF8), size: 28),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.sports_esports_rounded, color: neonPurple, size: 28),
                           SizedBox(width: 14),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Match is Currently Active',
+                                  'Match in Progress',
                                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
                                 ),
-                                SizedBox(height: 4),
+                                SizedBox(height: 2),
                                 Text(
-                                  'Players are rolling and moving on their devices. Verified result will appear here automatically upon completion.',
-                                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                                  'Verified results will be recorded upon completion.',
+                                  style: TextStyle(color: Colors.white60, fontSize: 12),
                                 ),
                               ],
                             ),
@@ -381,22 +345,22 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF064E3B),
+                        color: cardBg,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: const Color(0xFF10B981)),
                       ),
                       child: Column(
                         children: [
-                          const Icon(Icons.emoji_events_rounded, color: Color(0xFFFBBF24), size: 40),
+                          const Icon(Icons.emoji_events_rounded, color: Color(0xFFF59E0B), size: 36),
                           const SizedBox(height: 8),
                           const Text(
-                            'Match Completed & Verified!',
+                            'Match Verified!',
                             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17),
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 4),
                           Text(
                             'Winner: ${_room?.winnerName ?? 'Player'} (${(_room?.winnerColor ?? '').toUpperCase()})',
-                            style: const TextStyle(color: Color(0xFFFDE68A), fontWeight: FontWeight.w700, fontSize: 15),
+                            style: const TextStyle(color: Color(0xFFFDE68A), fontWeight: FontWeight.bold, fontSize: 15),
                           ),
                         ],
                       ),
@@ -413,28 +377,30 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
     required String colorName,
     required Color themeColor,
     required PlayerSlot? player,
+    required Color cardBg,
+    required Color borderPurple,
   }) {
     final isOccupied = player != null;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: cardBg,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isOccupied ? themeColor.withOpacity(0.5) : const Color(0xFF334155),
+          color: isOccupied ? themeColor.withValues(alpha: 0.5) : borderPurple,
           width: 1.5,
         ),
       ),
       child: Row(
         children: [
           CircleAvatar(
-            radius: 22,
-            backgroundColor: themeColor.withOpacity(0.2),
+            radius: 20,
+            backgroundColor: themeColor.withValues(alpha: 0.2),
             child: Icon(
               isOccupied ? Icons.person_rounded : Icons.person_outline_rounded,
               color: isOccupied ? themeColor : Colors.white30,
-              size: 24,
+              size: 22,
             ),
           ),
           const SizedBox(width: 14),
@@ -452,7 +418,7 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                       decoration: BoxDecoration(
-                        color: themeColor.withOpacity(0.2),
+                        color: themeColor.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -464,34 +430,18 @@ class _AdminLobbyScreenState extends State<AdminLobbyScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  isOccupied ? player.name : 'Waiting for player to join...',
+                  isOccupied ? player.name : 'Waiting to join...',
                   style: TextStyle(
-                    color: isOccupied ? Colors.white : Colors.white38,
+                    color: isOccupied ? Colors.white : Colors.white30,
+                    fontSize: 16,
                     fontWeight: isOccupied ? FontWeight.bold : FontWeight.normal,
-                    fontSize: 15,
                   ),
                 ),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: isOccupied ? const Color(0xFF064E3B) : const Color(0xFF1E293B),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isOccupied ? const Color(0xFF10B981) : Colors.white24,
-              ),
-            ),
-            child: Text(
-              isOccupied ? 'Ready' : 'Open Slot',
-              style: TextStyle(
-                color: isOccupied ? const Color(0xFF6EE7B7) : Colors.white38,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          if (isOccupied)
+            const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 20),
         ],
       ),
     );

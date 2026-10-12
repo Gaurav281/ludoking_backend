@@ -4,53 +4,68 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Ludo Room Arena</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              black: '#09090b',
+              surface: '#14131b',
+              purple: '#7c3aed',
+              neon: '#a855f7',
+              border: '#2e2a44'
+            }
+          }
+        }
+      }
+    }
+  </script>
   <link rel="stylesheet" href="css/style.css">
   <!-- Offline local PhaserJS bundle -->
   <script src="js/phaser.min.js"></script>
 </head>
-<body>
-  <div id="app-container">
+<body class="bg-brand-black text-white m-0 p-0 overflow-hidden select-none">
+  <div id="app-container" class="flex flex-col w-full h-full max-w-[560px] mx-auto relative bg-brand-black">
     <!-- Header Bar -->
-    <header class="game-header">
-      <div class="room-badge">
-        <span class="label">Room Code</span>
-        <span class="code" id="header-room-code">------</span>
+    <header class="flex items-center justify-between px-4 py-2.5 bg-brand-surface/90 backdrop-blur-md border-b border-brand-border z-10">
+      <div class="flex flex-col">
+        <span class="text-[10px] uppercase text-zinc-400 font-bold tracking-wider">Room Code</span>
+        <span class="text-base font-extrabold text-brand-neon tracking-widest" id="header-room-code">------</span>
       </div>
 
-      <div class="player-info-card">
-        <div class="player-dot red" id="player-dot"></div>
-        <span class="player-name" id="current-player-name">Player</span>
-      </div>
-
-      <div class="header-controls">
-        <button class="icon-btn" id="sound-btn" title="Toggle Sound">🔊</button>
-        <button class="icon-btn" id="exit-btn" title="Leave Match">✕</button>
+      <div class="flex items-center gap-2 bg-brand-black/60 px-3 py-1.5 rounded-full border border-brand-border">
+        <div class="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_8px_currentColor]" id="player-dot"></div>
+        <span class="text-xs font-semibold max-w-[120px] truncate" id="current-player-name">Player</span>
       </div>
     </header>
 
     <!-- Turn Banner -->
-    <div class="turn-banner">
-      <div class="turn-text">
-        <span class="turn-pill red" id="turn-pill">RED'S TURN</span>
-        <span id="turn-player-name" style="font-weight:700;">Waiting...</span>
+    <div class="flex items-center justify-between px-4 py-2 bg-brand-black/80 border-b border-brand-border/60">
+      <div class="flex items-center gap-2">
+        <span class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold tracking-wider turn-pill" id="turn-pill">WAITING</span>
+        <span class="text-xs font-semibold text-zinc-300" id="turn-player-name">Connecting...</span>
       </div>
-      <div class="status-pill">
-        <div class="sync-dot"></div>
-        <span>Synced</span>
+      <div class="flex items-center gap-1.5 text-[11px] text-zinc-400 font-medium">
+        <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+        <span>Live</span>
       </div>
     </div>
 
-    <!-- Canvas Game Container -->
-    <main id="phaser-game"></main>
+    <!-- Canvas Game Container (Responsive) -->
+    <main id="phaser-game" class="flex-1 w-full relative overflow-hidden flex items-center justify-center"></main>
 
     <!-- Bottom Controls & Dice Roll -->
-    <footer class="game-bottom-bar">
-      <div class="action-hint" id="action-hint">
-        Initializing match...
+    <footer class="flex items-center justify-between px-5 py-3 bg-brand-surface/95 backdrop-blur-lg border-t border-brand-border">
+      <div class="flex-1 pr-3">
+        <div class="text-sm font-semibold text-white tracking-tight" id="action-hint">
+          Connecting to match...
+        </div>
       </div>
-      <div class="dice-container">
-        <button class="dice-btn" id="dice-btn" disabled>
-          <div class="dice-pip-face" id="dice-face">
+      <div class="flex items-center">
+        <button class="dice-btn relative" id="dice-btn" disabled>
+          <div class="dice-pip-face shadow-inner" id="dice-face">
             <div style="grid-column: 2; grid-row: 2;" class="pip"></div>
           </div>
         </button>
@@ -60,15 +75,14 @@
     <!-- Victory Modal Overlay -->
     <div class="modal-overlay" id="victory-modal">
       <div class="modal-card">
-        <div class="trophy-icon">🏆</div>
-        <h2 class="modal-title">Match Completed!</h2>
-        <div class="winner-banner">
-          Winner: <span id="winner-name">Player</span> (<span id="winner-color">RED</span>)
+        <div class="text-4xl mb-2">🏆</div>
+        <h2 class="text-xl font-bold text-white mb-1">Match Finished!</h2>
+        <div class="text-sm font-semibold text-brand-neon mb-4">
+          Winner: <span id="winner-name" class="text-white">Player</span>
         </div>
-        <p class="modal-desc">
-          The verified result has been recorded and submitted to the tournament admin dashboard automatically.
-        </p>
-        <button class="btn-primary" id="btn-return-lobby">Return to Lobby</button>
+        <button class="w-full py-3 bg-brand-purple hover:bg-brand-neon text-white font-bold rounded-xl transition-all" id="btn-return-lobby">
+          Return to Lobby
+        </button>
       </div>
     </div>
   </div>
@@ -83,41 +97,28 @@
       const bridge = new ApiBridge();
       window.bridge = bridge;
 
-      // Update Header
+      // Update Header Room Code
       const roomCodeEl = document.getElementById('header-room-code');
       if (roomCodeEl && bridge.roomCode) {
         roomCodeEl.textContent = bridge.roomCode;
       }
 
+      // Update Player Dot Color
       const dot = document.getElementById('player-dot');
       if (dot) {
-        dot.className = `player-dot ${bridge.playerColor || 'red'}`;
+        dot.className = `w-3 h-3 rounded-full shadow-[0_0_8px_currentColor] ${bridge.playerColor === 'yellow' ? 'bg-amber-400 text-amber-400' : 'bg-red-500 text-red-500'}`;
       }
 
-      // Dice Click Listener
+      // Smart Dice Click Listener
       const diceBtn = document.getElementById('dice-btn');
       if (diceBtn) {
         diceBtn.addEventListener('click', () => {
-          bridge.rollDice();
-        });
-      }
-
-      // Sound Toggle
-      const soundBtn = document.getElementById('sound-btn');
-      if (soundBtn) {
-        soundBtn.addEventListener('click', () => {
-          bridge.soundEnabled = !bridge.soundEnabled;
-          soundBtn.textContent = bridge.soundEnabled ? '🔊' : '🔇';
-        });
-      }
-
-      // Exit Match Button
-      const exitBtn = document.getElementById('exit-btn');
-      if (exitBtn) {
-        exitBtn.addEventListener('click', () => {
-          if (confirm('Are you sure you want to exit the match?')) {
-            bridge.notifyFlutter('EXIT_MATCH', { roomCode: bridge.roomCode });
-            window.location.href = '../index.html';
+          const scene = window.game?.scene?.getScene('LudoScene');
+          if (scene && scene.gameState && scene.gameState.mustMove && scene.gameState.legalMoves?.length === 1) {
+            // Fast move single legal token
+            scene.bridge.moveToken(scene.gameState.legalMoves[0].tokenIndex);
+          } else {
+            bridge.rollDice();
           }
         });
       }
@@ -135,7 +136,7 @@
         });
       }
 
-      // Phaser Game Configuration
+      // Responsive Phaser Game Configuration
       const gameContainer = document.getElementById('phaser-game');
       const config = {
         type: Phaser.AUTO,

@@ -1,5 +1,6 @@
 /**
  * Main Phaser 3 Ludo Game Scene
+ * Responsive, Anti-Stacking, Accurate Touch Targeting
  */
 
 class LudoScene extends Phaser.Scene {
@@ -16,16 +17,16 @@ class LudoScene extends Phaser.Scene {
     };
 
     this.tokenHighlights = [];
+    this.tokenBounceTweens = [];
     this.gameState = null;
     this.bridge = null;
-    this.isRollingAnim = false;
   }
 
   create() {
     this.bridge = window.bridge;
     this.calculateDimensions();
 
-    // 1. Draw Board
+    // 1. Draw Board Graphics
     this.boardGraphics = this.add.graphics();
     window.LudoBoard.drawLudoBoard(this.boardGraphics, this, this.boardX, this.boardY, this.boardSize);
 
@@ -48,7 +49,7 @@ class LudoScene extends Phaser.Scene {
     const height = this.scale.height;
     const minDim = Math.min(width, height);
 
-    // Leave a small margin
+    // Responsive board size with balanced margin
     this.boardSize = Math.floor(minDim * 0.94);
     this.cellSize = this.boardSize / 15;
     this.boardX = Math.floor((width - this.boardSize) / 2);
@@ -59,47 +60,59 @@ class LudoScene extends Phaser.Scene {
     this.calculateDimensions();
     window.LudoBoard.drawLudoBoard(this.boardGraphics, this, this.boardX, this.boardY, this.boardSize);
     this.refreshAllTokenPositions();
+    this.highlightLegalMoves();
   }
 
   createTokenSprites() {
     ['red', 'yellow'].forEach(color => {
       for (let i = 0; i < 4; i++) {
         const container = this.add.container(0, 0);
-        container.setSize(this.cellSize * 0.85, this.cellSize * 0.85);
-        container.setInteractive({ useHandCursor: true });
+
+        // Accurate centered circular hitArea matching finger touch radius
+        const hitRadius = Math.max(18, this.cellSize * 0.48);
+        container.setInteractive(
+          new Phaser.Geom.Circle(0, 0, hitRadius),
+          Phaser.Geom.Circle.Contains
+        );
+        if (container.input) {
+          container.input.cursor = 'pointer';
+        }
 
         // Token shadow
-        const shadow = this.add.circle(2, 3, this.cellSize * 0.35, 0x000000, 0.4);
+        const shadow = this.add.circle(2, 3, this.cellSize * 0.36, 0x000000, 0.45);
 
         // Token outer rim
-        const rimColor = color === 'red' ? 0xb91c1c : 0xb45309;
-        const rim = this.add.circle(0, 0, this.cellSize * 0.36, rimColor);
+        const rimColor = color === 'red' ? 0x991b1b : 0xb45309;
+        const rim = this.add.circle(0, 0, this.cellSize * 0.38, rimColor);
 
         // Token body
-        const fillColor = color === 'red' ? 0xef4444 : 0xfbbf24;
-        const body = this.add.circle(0, 0, this.cellSize * 0.3, fillColor);
+        const fillColor = color === 'red' ? 0xef4444 : 0xf59e0b;
+        const body = this.add.circle(0, 0, this.cellSize * 0.32, fillColor);
 
-        // Token inner shiny highlight
-        const shine = this.add.circle(-this.cellSize * 0.08, -this.cellSize * 0.08, this.cellSize * 0.12, 0xffffff, 0.6);
+        // Token glossy shine
+        const shine = this.add.circle(-this.cellSize * 0.08, -this.cellSize * 0.08, this.cellSize * 0.12, 0xffffff, 0.55);
 
         // Token number label (1..4)
         const text = this.add.text(0, 0, `${i + 1}`, {
-          fontSize: `${Math.round(this.cellSize * 0.35)}px`,
+          fontSize: `${Math.round(this.cellSize * 0.36)}px`,
           fontStyle: 'bold',
           color: color === 'red' ? '#ffffff' : '#78350f'
         }).setOrigin(0.5);
 
         container.add([shadow, rim, body, shine, text]);
-        container.setDepth(10 + i);
+        container.setDepth(15 + i);
 
-        // Token click handler
-        container.on('pointerdown', () => this.handleTokenClick(color, i));
+        // Click handler
+        container.on('pointerdown', (pointer) => {
+          this.handleTokenClick(color, i);
+        });
 
         this.tokens[color].push({
           container,
           color,
           index: i,
-          currentStep: -1
+          currentStep: -1,
+          scale: 1.0
         });
       }
     });
@@ -107,18 +120,46 @@ class LudoScene extends Phaser.Scene {
     this.refreshAllTokenPositions();
   }
 
-  refreshAllTokenPositions() {
+  /**
+   * Calculates cell grouping and anti-stacking offsets for all tokens
+   */
+  calculateTokenLayoutMap() {
+    const layoutMap = new Map();
+
+    // Group all 8 tokens by their cell key
     ['red', 'yellow'].forEach(color => {
       this.tokens[color].forEach(tok => {
-        const pos = window.LudoBoard.getTokenPixelPosition(
-          color,
+        const key = window.LudoBoard.getCellKey(color, tok.currentStep, tok.index);
+        if (!layoutMap.has(key)) {
+          layoutMap.set(key, []);
+        }
+        layoutMap.get(key).push(tok);
+      });
+    });
+
+    return layoutMap;
+  }
+
+  refreshAllTokenPositions() {
+    const layoutMap = this.calculateTokenLayoutMap();
+
+    layoutMap.forEach((tokensInCell) => {
+      const count = tokensInCell.length;
+      tokensInCell.forEach((tok, slotIndex) => {
+        const pos = window.LudoBoard.getTokenPixelPositionWithOffset(
+          tok.color,
           tok.currentStep,
           tok.index,
           this.boardX,
           this.boardY,
-          this.cellSize
+          this.cellSize,
+          slotIndex,
+          count
         );
+
         tok.container.setPosition(pos.x, pos.y);
+        tok.container.setScale(pos.scale);
+        tok.scale = pos.scale;
       });
     });
   }
@@ -127,7 +168,8 @@ class LudoScene extends Phaser.Scene {
     this.gameState = state;
     this.updateDomUI(state);
 
-    // Animate token moves
+    // Update tokens & animate movements
+    const layoutMap = new Map();
     ['red', 'yellow'].forEach(color => {
       const serverTokens = state.players[color].tokens;
       this.tokens[color].forEach((tok, i) => {
@@ -141,10 +183,23 @@ class LudoScene extends Phaser.Scene {
       });
     });
 
+    // Re-layout tokens that are stationary
+    this.refreshAllTokenPositions();
     this.highlightLegalMoves();
   }
 
   animateTokenMove(tokenObj, fromStep, toStep) {
+    // Hop scale tween
+    this.tweens.add({
+      targets: tokenObj.container,
+      scaleX: tokenObj.scale * 1.35,
+      scaleY: tokenObj.scale * 1.35,
+      duration: 160,
+      yoyo: true,
+      ease: 'Quad.easeInOut'
+    });
+
+    // Destination position
     const targetPos = window.LudoBoard.getTokenPixelPosition(
       tokenObj.color,
       toStep,
@@ -154,33 +209,36 @@ class LudoScene extends Phaser.Scene {
       this.cellSize
     );
 
-    // Hop animation
-    this.tweens.add({
-      targets: tokenObj.container,
-      scaleX: 1.35,
-      scaleY: 1.35,
-      duration: 180,
-      yoyo: true,
-      ease: 'Quad.easeInOut'
-    });
-
     this.tweens.add({
       targets: tokenObj.container,
       x: targetPos.x,
       y: targetPos.y,
-      duration: 380,
-      ease: 'Cubic.easeOut'
+      duration: 360,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        this.refreshAllTokenPositions();
+        this.highlightLegalMoves();
+      }
     });
   }
 
   highlightLegalMoves() {
-    // Clear old highlights
+    // Clear old highlights & bounce tweens
     this.tokenHighlights.forEach(h => h.destroy());
     this.tokenHighlights = [];
 
+    this.tokenBounceTweens.forEach(t => t.stop());
+    this.tokenBounceTweens = [];
+
+    // Reset depths
+    ['red', 'yellow'].forEach(color => {
+      this.tokens[color].forEach((t, i) => {
+        t.container.setDepth(15 + i);
+      });
+    });
+
     if (!this.gameState || this.gameState.status !== 'IN_PROGRESS') return;
 
-    // Check if it's THIS user's turn
     const isMyTurn = this.gameState.currentTurnPlayerId === this.bridge.playerId;
     if (!isMyTurn || !this.gameState.mustMove || !this.gameState.legalMoves) return;
 
@@ -191,57 +249,119 @@ class LudoScene extends Phaser.Scene {
       const tok = this.tokens[myColor][idx];
       if (!tok) return;
 
-      const ring = this.add.circle(tok.container.x, tok.container.y, this.cellSize * 0.45);
-      ring.setStrokeStyle(3, 0xfacc15, 1);
-      ring.setDepth(9);
+      // Bring legal token above other objects
+      tok.container.setDepth(80 + idx);
+
+      // Neon Purple/Gold Glowing Ring
+      const ring = this.add.circle(tok.container.x, tok.container.y, this.cellSize * 0.48);
+      ring.setStrokeStyle(3.5, 0xa855f7, 1);
+      ring.setDepth(79);
 
       this.tweens.add({
         targets: ring,
-        scale: 1.25,
-        alpha: 0.3,
-        duration: 650,
+        scale: 1.28,
+        alpha: 0.35,
+        duration: 550,
         yoyo: true,
         repeat: -1
       });
 
+      // Gentle hopping bounce on legal token
+      const bounce = this.tweens.add({
+        targets: tok.container,
+        y: tok.container.y - 4,
+        duration: 320,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+
       this.tokenHighlights.push(ring);
+      this.tokenBounceTweens.push(bounce);
     });
   }
 
+  /**
+   * Intelligently handles token tap with multi-token stacking support
+   */
   handleTokenClick(color, tokenIndex) {
     if (!this.gameState || this.gameState.status !== 'IN_PROGRESS') return;
 
     const isMyTurn = this.gameState.currentTurnPlayerId === this.bridge.playerId;
     if (!isMyTurn) {
+      this.showHint("Wait for your turn");
       return;
     }
 
     if (!this.gameState.mustMove) {
-      alert("Please roll the dice first!");
+      this.showHint("Roll the dice first");
       return;
     }
 
-    const isLegal = this.gameState.legalMoves.some(m => m.tokenIndex === tokenIndex);
-    if (!isLegal) {
-      alert("This token cannot legally move with the current dice roll.");
+    const legalMoves = this.gameState.legalMoves || [];
+    if (legalMoves.length === 0) {
       return;
     }
 
-    // Submit move
-    this.bridge.moveToken(tokenIndex);
+    const myColor = this.gameState.currentTurnColor;
+
+    // Check if the directly clicked token is legal
+    const directLegal = legalMoves.some(m => m.tokenIndex === tokenIndex && color === myColor);
+    if (directLegal) {
+      this.bridge.moveToken(tokenIndex);
+      return;
+    }
+
+    // Check if another token of this player on the SAME CELL is legal
+    const clickedTok = this.tokens[color][tokenIndex];
+    if (clickedTok) {
+      const clickedKey = window.LudoBoard.getCellKey(color, clickedTok.currentStep, tokenIndex);
+      const legalOnSameCell = legalMoves.find(m => {
+        const legalTok = this.tokens[myColor][m.tokenIndex];
+        if (!legalTok) return false;
+        return window.LudoBoard.getCellKey(myColor, legalTok.currentStep, legalTok.index) === clickedKey;
+      });
+
+      if (legalOnSameCell) {
+        this.bridge.moveToken(legalOnSameCell.tokenIndex);
+        return;
+      }
+    }
+
+    // If player has ONLY 1 legal move on the entire board, execute it smoothly
+    if (legalMoves.length === 1 && color === myColor) {
+      this.bridge.moveToken(legalMoves[0].tokenIndex);
+      return;
+    }
+
+    // Token cannot move: gentle shake animation (no blocking alert)
+    if (clickedTok) {
+      this.tweens.add({
+        targets: clickedTok.container,
+        x: clickedTok.container.x + 4,
+        duration: 60,
+        yoyo: true,
+        repeat: 3,
+        ease: 'Sine.easeInOut'
+      });
+      this.showHint(`Cannot move Token ${tokenIndex + 1} with a ${this.gameState.diceRoll}`);
+    }
+  }
+
+  showHint(msg) {
+    const hint = document.getElementById('action-hint');
+    if (hint) {
+      hint.textContent = msg;
+    }
   }
 
   handleMatchComplete(state) {
     const overlay = document.getElementById('victory-modal');
     const winnerNameEl = document.getElementById('winner-name');
-    const winnerColorEl = document.getElementById('winner-color');
 
     if (overlay && winnerNameEl) {
       const winnerName = state.players[state.winnerColor]?.name || 'Player';
-      winnerNameEl.textContent = winnerName;
-      if (winnerColorEl) {
-        winnerColorEl.textContent = state.winnerColor.toUpperCase();
-      }
+      winnerNameEl.textContent = `${winnerName} (${state.winnerColor.toUpperCase()})`;
       overlay.classList.add('active');
     }
   }
@@ -261,35 +381,48 @@ class LudoScene extends Phaser.Scene {
     // Turn pill
     const turnPill = document.getElementById('turn-pill');
     if (turnPill) {
-      turnPill.textContent = `${turnColor.toUpperCase()}'S TURN`;
-      turnPill.className = `turn-pill ${turnColor}`;
+      if (isMyTurn) {
+        turnPill.textContent = 'YOUR TURN';
+        turnPill.className = 'turn-pill active-turn';
+      } else {
+        turnPill.textContent = `${turnColor.toUpperCase()}'S TURN`;
+        turnPill.className = `turn-pill ${turnColor}`;
+      }
     }
 
     const turnPlayerEl = document.getElementById('turn-player-name');
     if (turnPlayerEl) {
-      turnPlayerEl.textContent = turnPlayerName;
+      turnPlayerEl.textContent = isMyTurn ? 'You' : turnPlayerName;
     }
 
-    // Action Hint
+    // Action Hint with simple English
     const actionHint = document.getElementById('action-hint');
     if (actionHint) {
       if (state.status === 'COMPLETED') {
-        actionHint.textContent = `Match Finished! Winner: ${state.players[state.winnerColor]?.name}`;
+        actionHint.textContent = `Winner: ${state.players[state.winnerColor]?.name}`;
       } else if (isMyTurn) {
         if (!state.diceRolled) {
-          actionHint.textContent = 'Your Turn! Tap the dice to roll.';
+          actionHint.textContent = 'Your turn! Tap dice to roll';
         } else if (state.mustMove) {
-          actionHint.textContent = `Rolled a ${state.diceRoll}! Tap a highlighted token to move.`;
+          actionHint.textContent = `Rolled ${state.diceRoll}! Tap glowing token to move`;
         }
       } else {
-        actionHint.textContent = `Waiting for ${turnPlayerName} to ${state.mustMove ? 'move' : 'roll'}...`;
+        actionHint.textContent = `Waiting for ${turnPlayerName}...`;
       }
     }
 
     // Update Dice face and button state
     const diceBtn = document.getElementById('dice-btn');
     if (diceBtn) {
-      diceBtn.disabled = !isMyTurn || (state.diceRolled && state.mustMove);
+      const canRoll = isMyTurn && !state.diceRolled;
+      diceBtn.disabled = !canRoll && !(isMyTurn && state.mustMove && state.legalMoves?.length === 1);
+      
+      if (canRoll) {
+        diceBtn.classList.add('pulse-active');
+      } else {
+        diceBtn.classList.remove('pulse-active');
+      }
+
       if (state.diceRoll) {
         this.renderDicePips(state.diceRoll);
       }
@@ -301,7 +434,6 @@ class LudoScene extends Phaser.Scene {
     if (!face) return;
     face.innerHTML = '';
 
-    // Standard 3x3 pip layouts
     const layouts = {
       1: [4],
       2: [0, 8],
