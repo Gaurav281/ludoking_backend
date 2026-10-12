@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Ludo Room Arena</title>
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Offline local PhaserJS bundle -->
+  <script src="js/phaser.min.js"></script>
+</head>
+<body>
+  <div id="app-container">
+    <!-- Header Bar -->
+    <header class="game-header">
+      <div class="room-badge">
+        <span class="label">Room Code</span>
+        <span class="code" id="header-room-code">------</span>
+      </div>
+
+      <div class="player-info-card">
+        <div class="player-dot red" id="player-dot"></div>
+        <span class="player-name" id="current-player-name">Player</span>
+      </div>
+
+      <div class="header-controls">
+        <button class="icon-btn" id="sound-btn" title="Toggle Sound">🔊</button>
+        <button class="icon-btn" id="exit-btn" title="Leave Match">✕</button>
+      </div>
+    </header>
+
+    <!-- Turn Banner -->
+    <div class="turn-banner">
+      <div class="turn-text">
+        <span class="turn-pill red" id="turn-pill">RED'S TURN</span>
+        <span id="turn-player-name" style="font-weight:700;">Waiting...</span>
+      </div>
+      <div class="status-pill">
+        <div class="sync-dot"></div>
+        <span>Synced</span>
+      </div>
+    </div>
+
+    <!-- Canvas Game Container -->
+    <main id="phaser-game"></main>
+
+    <!-- Bottom Controls & Dice Roll -->
+    <footer class="game-bottom-bar">
+      <div class="action-hint" id="action-hint">
+        Initializing match...
+      </div>
+      <div class="dice-container">
+        <button class="dice-btn" id="dice-btn" disabled>
+          <div class="dice-pip-face" id="dice-face">
+            <div style="grid-column: 2; grid-row: 2;" class="pip"></div>
+          </div>
+        </button>
+      </div>
+    </footer>
+
+    <!-- Victory Modal Overlay -->
+    <div class="modal-overlay" id="victory-modal">
+      <div class="modal-card">
+        <div class="trophy-icon">🏆</div>
+        <h2 class="modal-title">Match Completed!</h2>
+        <div class="winner-banner">
+          Winner: <span id="winner-name">Player</span> (<span id="winner-color">RED</span>)
+        </div>
+        <p class="modal-desc">
+          The verified result has been recorded and submitted to the tournament admin dashboard automatically.
+        </p>
+        <button class="btn-primary" id="btn-return-lobby">Return to Lobby</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/ludoBoard.js"></script>
+  <script src="js/apiBridge.js"></script>
+  <script src="js/ludoGame.js"></script>
+  <script>
+    // Initialize Game & Bridge
+    window.addEventListener('DOMContentLoaded', () => {
+      const bridge = new ApiBridge();
+      window.bridge = bridge;
+
+      // Update Header
+      const roomCodeEl = document.getElementById('header-room-code');
+      if (roomCodeEl && bridge.roomCode) {
+        roomCodeEl.textContent = bridge.roomCode;
+      }
+
+      const dot = document.getElementById('player-dot');
+      if (dot) {
+        dot.className = `player-dot ${bridge.playerColor || 'red'}`;
+      }
+
+      // Dice Click Listener
+      const diceBtn = document.getElementById('dice-btn');
+      if (diceBtn) {
+        diceBtn.addEventListener('click', () => {
+          bridge.rollDice();
+        });
+      }
+
+      // Sound Toggle
+      const soundBtn = document.getElementById('sound-btn');
+      if (soundBtn) {
+        soundBtn.addEventListener('click', () => {
+          bridge.soundEnabled = !bridge.soundEnabled;
+          soundBtn.textContent = bridge.soundEnabled ? '🔊' : '🔇';
+        });
+      }
+
+      // Exit Match Button
+      const exitBtn = document.getElementById('exit-btn');
+      if (exitBtn) {
+        exitBtn.addEventListener('click', () => {
+          if (confirm('Are you sure you want to exit the match?')) {
+            bridge.notifyFlutter('EXIT_MATCH', { roomCode: bridge.roomCode });
+            window.location.href = '../index.html';
+          }
+        });
+      }
+
+      // Return Lobby Button
+      const returnBtn = document.getElementById('btn-return-lobby');
+      if (returnBtn) {
+        returnBtn.addEventListener('click', () => {
+          bridge.notifyFlutter('RETURN_LOBBY', { roomCode: bridge.roomCode });
+          if (window.history.length > 1) {
+            window.history.back();
+          } else {
+            window.location.href = '../index.html';
+          }
+        });
+      }
+
+      // Phaser Game Configuration
+      const gameContainer = document.getElementById('phaser-game');
+      const config = {
+        type: Phaser.AUTO,
+        parent: 'phaser-game',
+        width: gameContainer.clientWidth || 480,
+        height: gameContainer.clientHeight || 480,
+        transparent: true,
+        scale: {
+          mode: Phaser.Scale.RESIZE,
+          autoCenter: Phaser.Scale.CENTER_BOTH
+        },
+        scene: [LudoScene]
+      };
+
+      window.game = new Phaser.Game(config);
+    });
+  </script>
+</body>
+</html>

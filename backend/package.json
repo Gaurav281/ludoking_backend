@@ -1,0 +1,16 @@
+{
+  "name": "ludo-backend",
+  "version": "1.0.0",
+  "description": "Serverless backend API for Simple Multiplayer Ludo Room Platform",
+  "main": "dev-server.js",
+  "scripts": {
+    "dev": "node dev-server.js",
+    "start": "node dev-server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mongodb": "^6.13.0"
+  }
+}
